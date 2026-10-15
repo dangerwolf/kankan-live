@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { handleYspRequest } from './ysp.js';
 
 // ==================== 常量 ====================
 const KANKAN_API_BASE = 'https://kapi.kankanews.com';
@@ -661,6 +662,10 @@ function handleChannelList() {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const source = url.searchParams.get('source');
+    if (source === 'ysp') {
+      return handleYspRequest(request, url, env);
+    }
     const id = url.searchParams.get('id');
 
     // 没有 id 参数 → 显示频道列表

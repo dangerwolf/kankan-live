@@ -7,6 +7,40 @@
 
 
 
+## 新增：央视/央视频（YSP）动态地址支持
+
+- 通过 `source=ysp` 显式切换到央视源；不带该参数时保持现有 Kankan 行为不变。
+- 央视播放地址是**动态临时授权地址**，Worker 会在请求时重新生成 `guid/uuid4/flowid/cKey/ck_guard_time` 并请求 `https://bkliveinfo.ysp.cctv.cn`。
+- 直播返回可直接播放的 `application/vnd.apple.mpegurl`；回看（`playseek=YYYYMMDDHHMMSS-YYYYMMDDHHMMSS`）返回 302 到动态地址（`Cache-Control: no-store`）。
+
+### 调用示例
+
+```text
+# Kankan（原逻辑）
+/?id=wxty
+
+# 央视直播（YSP）
+/?source=ysp&id=cctv1
+
+# 央视回看（YSP）
+/?source=ysp&id=cctv1&playseek=20261015010000-20261015013000
+
+# 查看调试信息（不输出完整 cKey）
+/?source=ysp&id=cctv1&info=1
+```
+
+### 缓存与重试说明
+
+- 直播 URL 仅做短 TTL 缓存（Worker Cache API），并结合 URL 自身过期字段判断是否刷新。
+- 回看地址不做可复用缓存，直接返回 302，避免误当永久静态地址。
+- 回看模式会先带 `playbacktime` 请求，失败后按兼容策略重试并处理回看 URL。
+
+### 安全边界
+
+- 不提供任意 URL 代理；仅允许固定央视相关上游域名及必要跳转白名单。
+- 对 M3U8 拉取设置超时、重定向次数、响应体大小、递归深度限制。
+- 默认保持 HTTPS 证书校验，不关闭 TLS 验证。
+- 协议常量已集中在代码中；如后续需要替换敏感可变参数，建议迁移到 Workers Secrets/环境变量管理。
 
 ## TL;DR
 
@@ -2153,5 +2187,4 @@ M3U8 下载失败
 2. [![This Website is Powered by DigitalPlat FreeDomain Get a free domain from DigitalPlat.](https://img.shields.io/badge/DigitalPlat-Get%20a%20free%20domain%20from%20DigitalPlat.-2563eb?style=flat-square&logo=databricks&logoColor=ffffff)](https://dash.domain.digitalplat.org/signup?ref=3lT6CU6HGe)
 
 3. [DMIT](https://www.dmit.io/aff.php?aff=23825)
-
 
