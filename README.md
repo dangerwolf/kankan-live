@@ -1,5 +1,5 @@
 # kankan-live
-有幸经过几手传播，得到了【https://t.me/iptvorganization】提供的【wxty.php】文件。
+有幸经过几手传播，得到了【 https://t.me/iptvorganization 】提供的【wxty.php】文件。
 然后由于手头没有付费版的APTV app，也没有部署了PHP环境的服务器。所以想要迁移到免费的CloudFlare的Workers。
 遂有此。
 
