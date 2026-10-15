@@ -12,10 +12,17 @@ const LIVE_URL_MIN_LEFT = 90;
 const DONOR_SCAN_DAYS = 7;
 const FALLBACK_LIVE_URL = 'https://cdn.jsdelivr.net/gh/jkwu5472/first/media.m3u8';
 
-const channelMap = {
-  dfws: 1, shxwzh: 2, shds: 4, dycj: 5,
-  hhxd: 9, wxty: 10, mdy: 11, jsrw: 12,
+const channelInfo = {
+  dfws:   { cid: 1,  name: '东方卫视',   desc: '上海卫视主频道' },
+  shxwzh: { cid: 2,  name: '新闻综合',   desc: '上海新闻综合频道' },
+  shds:   { cid: 4,  name: '上海都市',   desc: '上海都市频道' },
+  dycj:   { cid: 5,  name: '第一财经',   desc: '第一财经频道' },
+  hhxd:   { cid: 9,  name: '哈哈炫动',   desc: '少儿频道' },
+  wxty:   { cid: 10, name: '五星体育',   desc: '五星体育频道' },
+  mdy:    { cid: 11, name: '魅力音乐',   desc: '魅力音乐频道' },
+  jsrw:   { cid: 12, name: '纪实人文',   desc: '纪实人文频道' },
 };
+
 
 // ==================== 工具函数 ====================
 
@@ -60,6 +67,7 @@ function toLocalProxyUrl(url, env) {
   if (url.startsWith('https://')) return prefix + url.slice(8);
   return url;
 }
+
 
 // ==================== RSA 公钥解密 ====================
 
@@ -308,6 +316,7 @@ async function fetchPlayAddress(channelId, env, clientIp) {
         fallbackShift = { addr: pick.addr, kind: pick.kind, source: 'donor', program: p };
     }
   }
+
   return fallbackShift || null;
 }
 
@@ -331,9 +340,7 @@ function urlExpiry(urlStr) {
       const parts2 = String(q.token).split('.');
       if (parts2.length >= 2) {
         try {
-          const payload = JSON.parse(
-            atob(parts2[1].replace(/-/g, '+').replace(/_/g, '/'))
-          );
+          const payload = JSON.parse(atob(parts2[1].replace(/-/g, '+').replace(/_/g, '/')));
           if (payload?.exp) cands.push(parseInt(payload.exp, 10));
         } catch {}
       }
@@ -398,9 +405,9 @@ function toAbsoluteUrl(base, relative) {
 }
 
 function rewritePlaylistTagUris(line, base) {
-  return line.replace(/URI="([^"]+)"/gi, (_m, uri) =>
-    'URI="' + toAbsoluteUrl(base, uri) + '"'
-  );
+  return line.replace(/URI="([^"]+)"/gi, (_match, uri) => {
+    return 'URI="' + toAbsoluteUrl(base, uri) + '"';
+  });
 }
 
 async function getFlatM3u8(url, depth, env) {
@@ -438,20 +445,20 @@ async function getFlatM3u8(url, depth, env) {
   return joined.includes('#EXTINF') ? joined : '';
 }
 
-// ==================== Cache (Cache API) ====================
+// ==================== 缓存 (Cache API) ====================
 
 async function readCachedLiveUrl(channelId) {
   const cache = caches.default;
-  const key = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
-  const cached = await cache.match(key);
+  const cacheKey = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
+  const cached = await cache.match(cacheKey);
   if (!cached) return null;
   try {
-    const data = await cached.json();
+    const d = await cached.json();
     const now = Math.floor(Date.now() / 1000);
-    if (data.created && now - data.created >= LIVE_URL_CACHE_TTL) return null;
-    if (!data.url || !data.url.startsWith('https://')) return null;
-    if (data.exp > 0 && data.exp - now < LIVE_URL_MIN_LEFT) return null;
-    return data.url;
+    if (d.created && now - d.created >= LIVE_URL_CACHE_TTL) return null;
+    if (!d.url || !d.url.startsWith('https://')) return null;
+    if (d.exp > 0 && d.exp - now < LIVE_URL_MIN_LEFT) return null;
+    return d.url;
   } catch {
     return null;
   }
@@ -460,22 +467,17 @@ async function readCachedLiveUrl(channelId) {
 async function writeCachedLiveUrl(channelId, url) {
   const exp = urlExpiry(url) || (Math.floor(Date.now() / 1000) + 300);
   const cache = caches.default;
-  const key = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
-  const payload = JSON.stringify({
-    url, exp, created: Math.floor(Date.now() / 1000),
-  });
-  await cache.put(key, new Response(payload, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': `max-age=${LIVE_URL_CACHE_TTL}`,
-    },
-  }));
+  const cacheKey = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
+  await cache.put(cacheKey, new Response(
+    JSON.stringify({ url, exp, created: Math.floor(Date.now() / 1000) }),
+    { headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${LIVE_URL_CACHE_TTL}` } }
+  ));
 }
 
 async function clearCachedLiveUrl(channelId) {
   const cache = caches.default;
-  const key = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
-  await cache.delete(key);
+  const cacheKey = new Request(`https://kankan-live-cache.internal/channel-${channelId}`);
+  await cache.delete(cacheKey);
 }
 
 // ==================== 主逻辑 ====================
@@ -494,19 +496,19 @@ async function getLiveUrl(channelId, forceRefresh, env, clientIp) {
 
   const found = await fetchPlayAddress(channelId, env, clientIp);
   if (!found) {
-    console.log('[wxty] address-failed: 未取到可用播放地址');
+    console.log('[wxty] address-failed');
     return { liveUrl: null, cacheHit: false, meta };
   }
 
   const plain = rsaPublicDecrypt(found.addr);
   if (!plain) {
-    console.log('[wxty] decrypt-failed: RSA 解密失败 (source=' + found.source + ')');
+    console.log('[wxty] decrypt-failed (source=' + found.source + ')');
     return { liveUrl: null, cacheHit: false, meta };
   }
 
   const liveUrl = normalizeLiveUrl(plain);
   if (!liveUrl) {
-    console.log('[wxty] bad-url: 解密结果不是合法 URL');
+    console.log('[wxty] bad-url');
     return { liveUrl: null, cacheHit: false, meta };
   }
 
@@ -537,8 +539,7 @@ function redirectToFallback(reason) {
 
 async function handleTsProxy(url, env) {
   const tsUrl = decodeURIComponent(url.searchParams.get('ts_url') || '');
-  if (!/^https?:\/\//i.test(tsUrl))
-    return new Response('Invalid url', { status: 400 });
+  if (!/^https?:\/\//i.test(tsUrl)) return new Response('Invalid url', { status: 400 });
 
   let filename;
   try {
@@ -547,20 +548,15 @@ async function handleTsProxy(url, env) {
     return new Response('Invalid url', { status: 400 });
   }
 
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.(ts|m4s|mp4|aac|key|vtt)$/.test(filename) ||
-      filename.includes('..'))
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.(ts|m4s|mp4|aac|key|vtt)$/.test(filename) || filename.includes('..'))
     return new Response('Invalid filename', { status: 400 });
 
   const cache = caches.default;
   const cacheKey = new Request(`https://ts-cache.internal/${filename}`);
-
   const cached = await cache.match(cacheKey);
   if (cached) {
     return new Response(cached.body, {
-      headers: {
-        'Content-Type': 'video/MP2T',
-        'Cache-Control': 'max-age=86400',
-      },
+      headers: { 'Content-Type': 'video/MP2T', 'Cache-Control': 'max-age=86400' },
     });
   }
 
@@ -573,18 +569,11 @@ async function handleTsProxy(url, env) {
   };
 
   try {
-    const resp = await fetch(toLocalProxyUrl(tsUrl, env), {
-      headers, redirect: 'follow',
-    });
-    if (resp.status !== 200)
-      return new Response('无法获取 TS 分片', { status: 502 });
+    const resp = await fetch(toLocalProxyUrl(tsUrl, env), { headers, redirect: 'follow' });
+    if (resp.status !== 200) return new Response('无法获取 TS 分片', { status: 502 });
     const data = await resp.arrayBuffer();
-
     const cacheResp = new Response(data, {
-      headers: {
-        'Content-Type': 'video/MP2T',
-        'Cache-Control': 'max-age=86400',
-      },
+      headers: { 'Content-Type': 'video/MP2T', 'Cache-Control': 'max-age=86400' },
     });
     await cache.put(cacheKey, cacheResp.clone());
     return cacheResp;
@@ -593,34 +582,109 @@ async function handleTsProxy(url, env) {
   }
 }
 
-// ==================== Worker 入口 ====================
+
+// ==================== 频道列表页 ====================
+
+function handleChannelList() {
+  const channels = Object.entries(channelInfo);
+  const cards = channels.map(([key, ch]) => `
+    <a class="card" href="/?id=${key}">
+      <div class="card-name">${ch.name}</div>
+      <div class="card-desc">${ch.desc}</div>
+    </a>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>看看新闻 · 直播频道</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f1117; color: #e4e6eb; min-height: 100vh;
+  }
+  .header {
+    text-align: center; padding: 32px 16px 20px;
+  }
+  .header h1 {
+    font-size: 1.5rem; font-weight: 600; color: #fff;
+  }
+  .header p {
+    font-size: 0.85rem; color: #8b8f98; margin-top: 6px;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px; padding: 16px; max-width: 720px; margin: 0 auto;
+  }
+  .card {
+    display: flex; flex-direction: column; justify-content: center;
+    background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px;
+    padding: 20px 16px; text-decoration: none; color: inherit;
+    transition: all 0.15s ease; min-height: 90px;
+  }
+  .card:hover {
+    background: #232734; border-color: #3a3d4a; transform: translateY(-2px);
+  }
+  .card:active { transform: translateY(0); }
+  .card-name {
+    font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 4px;
+  }
+  .card-desc {
+    font-size: 0.75rem; color: #8b8f98;
+  }
+  .footer {
+    text-align: center; padding: 20px; font-size: 0.75rem; color: #555;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>📺 看看新闻 · 直播</h1>
+    <p>点击频道开始播放</p>
+  </div>
+  <div class="grid">${cards}</div>
+  <div class="footer">共 ${channels.length} 个频道</div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
+
+
+// ==================== 入口 ====================
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const id = url.searchParams.get('id') || 'wxty';
+    const id = url.searchParams.get('id');
 
-    if (!channelMap[id])
-      return new Response('无效频道ID', { status: 400 });
-    const channelId = channelMap[id];
+    // 没有 id 参数 → 显示频道列表
+    if (!id) return handleChannelList();
+
+    if (!channelInfo[id]) return new Response('无效频道ID', { status: 400 });
+    const channelId = channelInfo[id].cid;
+
 
     // TS 分片代理
-    if (url.searchParams.has('ts_url'))
-      return handleTsProxy(url, env);
+    if (url.searchParams.has('ts_url')) return handleTsProxy(url, env);
 
     const clientIp = request.headers.get('CF-Connecting-IP') || '';
 
     // 获取直播地址
-    const forceRefresh =
-      url.searchParams.has('refresh') && url.searchParams.get('refresh') !== '0';
-    let { liveUrl, cacheHit, meta } =
-      await getLiveUrl(channelId, forceRefresh, env, clientIp);
+    const forceRefresh = url.searchParams.has('refresh') && url.searchParams.get('refresh') !== '0';
+    let { liveUrl, cacheHit, meta } = await getLiveUrl(channelId, forceRefresh, env, clientIp);
 
     if (!liveUrl) return redirectToFallback();
 
-    // 拉取并展平 m3u8
+    // 获取并展平 m3u8
     let finalM3u8 = await getFlatM3u8(liveUrl, 0, env);
 
+    // 缓存命中但 m3u8 获取失败 → 清缓存重试
     if (!finalM3u8 && cacheHit) {
       await clearCachedLiveUrl(channelId);
       const retry = await getLiveUrl(channelId, true, env, clientIp);
@@ -653,6 +717,7 @@ export default {
       });
     }
 
+    // 返回 m3u8
     return new Response(finalM3u8, {
       headers: {
         'Content-Type': 'application/vnd.apple.mpegurl',
