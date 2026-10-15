@@ -2137,3 +2137,21 @@ M3U8 下载失败
 最重要的理解是：
 
 > **这个文件不是简单“请求一个视频地址”，而是在模拟一个官方客户端：先完成身份和请求授权，再获取受保护的播放地址，最后把复杂的直播资源转换成播放器容易消费的格式。**
+
+
+---
+# Star history
+
+[![Star History Chart](https://api.star-history.com/svg?repos=dangerwolf/kankan-live&type=Date)](https://www.star-history.com/#dangerwolf/kankan-live&Date)
+
+
+# 友情赞助商
+
+
+1. [Cloudcone VPS](https://app.cloudcone.com/?ref=12850)
+
+2. [![This Website is Powered by DigitalPlat FreeDomain Get a free domain from DigitalPlat.](https://img.shields.io/badge/DigitalPlat-Get%20a%20free%20domain%20from%20DigitalPlat.-2563eb?style=flat-square&logo=databricks&logoColor=ffffff)](https://dash.domain.digitalplat.org/signup?ref=3lT6CU6HGe)
+
+3. [DMIT](https://www.dmit.io/aff.php?aff=23825)
+
+
